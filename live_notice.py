@@ -7,8 +7,6 @@ import subprocess
 import logging
 
 import live_tool as live
-from pushbullet import PushBullet
-
 
 def log(msg, prefix="", err=None, end="\n"):
    t = time.localtime()
@@ -19,14 +17,6 @@ def log(msg, prefix="", err=None, end="\n"):
       traceback.print_exception(*sys.exc_info())
    print(f"{prefix}{tm} {msg}", end=end)
    sys.stdout.flush()
-
-
-def push_notication(PB, LIVE_DAO):
-   for i in PB.getDevices():
-      if i["pushable"]:
-         PB.pushLink(i["iden"], f'{LIVE_DAO.get_name()}直播中...',
-                     f'{live.LIVE_HOST}/{LIVE_DAO.get_url()}')
-
 
 ARIA2_RPC = "http://localhost:6800/jsonrpc"
 
@@ -54,12 +44,6 @@ def download(dao, *url):
 
 
 def argsProcess(LIVE_DAO, ARGS):
-   if "push" in ARGS:
-      log(f'正在推送...')
-      try:
-         push_notication(ARGS["push"], LIVE_DAO)
-      except Exception as e:
-         log(f'推送失敗...', err=True)
    if "download" in ARGS:
       log(f'正在下載...')
       try:
@@ -118,6 +102,4 @@ if __name__ == "__main__":
             ARGS[x[0]] = True
          else:
             ARGS[x[0]] = x[1]
-   if "push" in ARGS:
-      ARGS["push"] = PushBullet(ARGS["push"])
    main(LIVE_ID, **ARGS)
