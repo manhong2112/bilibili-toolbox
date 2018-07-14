@@ -77,7 +77,8 @@ class Live():
       def __connect(roomid):
          conn = websocket.create_connection("wss://tx-live-dmcmt-hk-01.chat.bilibili.com/sub")
          data =(f'{{"uid":0,"roomid":{roomid},"protover":1,"platform":"web","clientver":"1.2.8"}}').encode()
-         conn.send(lchat.chatEncode(7, data))
+         d = lchat.chatEncode(7, data)
+         conn.send(bytes(d))
          return conn
 
       def reconnect(self):
@@ -121,7 +122,7 @@ class Live():
 
          def keepSocketLife():
             while True:
-               send(lchat.chatEncode(2, b'[object Object]'))
+               send(bytes(lchat.chatEncode(2, b'[object Object]')))
                time.sleep(30)
 
          self.danmakuThread = Thread(target=recvDanmaku)
