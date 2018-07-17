@@ -18,7 +18,7 @@ PLAYURL_API = f"{API_HOST}/api/playurl"
 GETINFO_API = f"{API_HOST}/room/v1/Room/get_info"
 ROOMINIT_API = f"{API_HOST}/room/v1/Room/room_init"
 LIVE_STATUS = {"PREPARING": 0, "LIVE": 1, "ROUND": 2}
-
+SUB_TYPE = {"DANMU_MSG": 0, "GUARD_MSG": 1, "SYS_MSG": 2}
 
 def get_roomid(shortid):
    url = f"{ROOMINIT_API}?id={shortid}"
@@ -51,7 +51,7 @@ class Live():
 
       self.PLAYURL_URL = f"{PLAYURL_API}?cid={self.ROOM_ID}&quality=4&otype=json&platform=web"
 
-      self.chat_room = Live.ChatRoom(self.ROOM_ID)
+      self.sub = Live.Sub(self.ROOM_ID)
 
    def get_live_status(self):
       self.raw = get_roominfo(self.ROOM_ID)
@@ -71,11 +71,11 @@ class Live():
    def get_recently_rawdata(self):
       return self.raw
 
-   class ChatRoom(object):
+   class Sub(object):
 
       @staticmethod
       def __connect(roomid):
-         conn = websocket.create_connection("wss://tx-live-dmcmt-hk-01.chat.bilibili.com/sub")
+         conn = websocket.create_connection("wss://tx-live-dmcmt-sel-01.chat.bilibili.com/sub")
          data =(f'{{"uid":0,"roomid":{roomid},"protover":1,"platform":"web","clientver":"1.2.8"}}').encode()
          d = lchat.chatEncode(7, data)
          conn.send(bytes(d))
@@ -87,8 +87,9 @@ class Live():
 
       def __init__(self, roomid):
          self.roomid = roomid
-         self.danmakuList = []
-         self.newDanmakuQueue = queue.Queue()
+         self.msgQueue = {}
+         self.msgCallback = {}
+
          self.conn = self.__connect(roomid)
 
          def send(data):
@@ -114,35 +115,45 @@ class Live():
                self.reconnect()
             return self.conn.recv_frame()
 
-         def recvDanmaku():
+         def recvMsg():
             while True:
                data = lchat.chatDecode(recv_frame().data)
                for i in data:
-                  self.newDanmakuQueue.put(i)
+                  try:
+                     cmd = json.loads(i["content"])["cmd"]
+                  except Exception:
+                     continue
+                  if cmd in self.msgCallback:
+                     self.msgCallback[cmd](json.loads(i["content"]))
+                  else:
+                     if cmd not in self.msgQueue:
+                        self.msgQueue[cmd] = queue.Queue()
+                     self.msgQueue[cmd].put(json.loads(i["content"]))
 
          def keepSocketLife():
             while True:
                send(bytes(lchat.chatEncode(2, b'[object Object]')))
                time.sleep(30)
 
-         self.danmakuThread = Thread(target=recvDanmaku)
+         self.msgThread = Thread(target=recvMsg)
          self.keepSocketLifeThread = Thread(target=keepSocketLife)
 
-         self.danmakuThread.start()
+         self.msgThread.start()
          self.keepSocketLifeThread.start()
 
-      def hasNext(self):
-         return not self.newDanmakuQueue.empty()
+      def hasNext(self, msgType="DANMU_MSG"):
+         return msgType in self.msgQueue and not self.msgQueue[msgType].empty()
 
-      def next(self, block=True):
-         danmaku = self.newDanmakuQueue.get(block)
-         self.danmakuList.append(danmaku)
-         return danmaku
+      def next(self, block=True, msgType="DANMU_MSG"):
+         if msgType not in self.msgQueue:
+            self.msgQueue[cmd] = queue.Queue()
+         return self.msgQueue[cmd].get(block)
 
-      def cleanQueue(self):
-         while not self.newDanmakuQueue.empty():
-            self.danmakuList.append(self.newDanmakuQueue.get())
-         return self.danmakuList
+      def cleanQueue(self, msgType="DANMU_MSG"):
+         return
+
+      def setCallback(self, msgType, func):
+         self.msgCallback[msgType] = func
 
       def __get__(self, index):
          return self.danmakuList[index]
@@ -151,7 +162,7 @@ class Live():
          self.conn.close()
 
    def get_chat_room(self):
-      return self.chat_room
+      return self.sub
 
 
 def get_html(url):

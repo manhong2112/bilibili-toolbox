@@ -32,35 +32,39 @@ def join(roomid, tv_id, cookie):
            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.183 Safari/537.36 Vivaldi/1.96.1147.36",
        })
 
+raffleIdSet = set()
+
 def process(msg, cookie):
+   global raffleIdSet
    roomid = msg["real_roomid"]
    tv_list = get_small_tv_list(roomid)
-   return [join(roomid, i["raffleId"], cookie).read().decode() for i in tv_list]
+   ret = []
+   for i in tv_list:
+      raffleId = i["raffleId"]
+      if raffleId in raffleIdSet:
+         continue
+      raffleIdSet.add(raffleId)
+      ret.append(join(roomid, raffleId, cookie).read().decode())
+   return ret
 
-def main0(msg, args):
+def func0(msg, args):
    print("\n".join(process(msg, args["cookie"])))
+
+
 
 def main(args):
    print(args["cookie"])
    room = live_tool.Live(184298).get_chat_room()
-   while True:
-      try:
-         msg = json.loads(room.next()["content"])
-         print(msg)
-         if "cmd" in msg and msg["cmd"] == "SYS_MSG" and\
-            "rep" in msg and msg["rep"] == 1 and\
-            "styleType" in msg and msg["styleType"] == 2:
-            print("small tv?")
-            t = np.random.rand() * 5 + abs(np.random.normal(loc=10, scale=5))
-            print(f"sleep for {t}")
-            threading.Timer(t, main0, (msg, args)).start()
-      except json.decoder.JSONDecodeError as _: # ignored
-         pass
-      except Exception as e:
-         # 管他甚麼錯誤, 重啟就對了 (X
-         room = live_tool.Live(184298).get_chat_room()
-         print("reconnect chat room")
-         print(e)
+   def msgCallback(msg):
+      print(msg)
+      if "rep" in msg and msg["rep"] == 1 and\
+         "styleType" in msg and msg["styleType"] == 2:
+         print("small tv?")
+         t = np.random.rand() * 5 + abs(np.random.normal(loc=10, scale=5))
+         print(f"sleep for {t}")
+         threading.Timer(t, func0, (msg, args)).start()
+   room.setCallback("SYS_MSG", msgCallback)
+
 
 def argsParse(argv, defValue=None):
    args = defValue
